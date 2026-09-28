@@ -1,0 +1,289 @@
+<div class="ai-mask" id="aiMask" hidden></div>
+<section class="ai-panel" id="aiPanel" role="dialog" aria-modal="true" aria-label="AI 面试助手" hidden>
+  <div class="ai-head">
+    <h2>AI 面试助手</h2>
+    <span class="ai-sub">模拟 AI 面试初筛 · 本地评分不上传</span>
+    <button class="ai-x" id="aiClose" type="button" title="关闭" aria-label="关闭">✕</button>
+  </div>
+  <div class="ai-steps" id="aiSteps">
+    <span class="ai-step" data-step="setup">① 设定面试</span>
+    <span class="ai-step" data-step="interview">② 逐题作答</span>
+    <span class="ai-step" data-step="report">③ 面试报告</span>
+  </div>
+  <div class="ai-body">
+    <!-- ============ 1. 设定 ============ -->
+    <div class="ai-view on" id="aiViewSetup">
+      <div class="ai-field" style="margin-bottom:12px;border-color:#bfdbfe;background:linear-gradient(180deg,#f7fbff,#eef5ff)">
+        <label>面试官模式</label>
+        <div class="ai-mode" id="aiModePick" role="radiogroup" aria-label="面试官模式">
+          <button type="button" class="ai-mode-btn" data-mode="llm" role="radio" aria-checked="false">
+            <b>🤖 AI 面试官（接大模型）</b>
+            <span>顺着你的简历和回答现场出题、追问、点评；需要配一个 API Key（或本地 Ollama）。<em id="aiModeLlmSub">未配置 Key</em></span>
+          </button>
+          <button type="button" class="ai-mode-btn" data-mode="bank" role="radio" aria-checked="false">
+            <b>📚 固定题库（不外接大模型）</b>
+            <span>用内置题库 + 本地规则出题与追问，全程不联网、不发送任何内容；题目固定但即时可用。<em id="aiModeBankSub">完全离线</em></span>
+          </button>
+          <button type="button" class="ai-mode-btn" data-mode="mine" role="radio" aria-checked="false">
+            <b>📥 我的题目 + 大模型追问</b>
+            <span>题目由你自己导入（一行一题，或粘贴面经自动抽题），按顺序问；追问、评分、报告交给大模型。<em id="aiModeMineSub">未导入题目</em></span>
+          </button>
+        </div>
+        <div class="ai-note" id="aiModeHint" style="margin-top:6px"></div>
+      </div>
+      <div class="ai-grid">
+        <div class="ai-field">
+          <label for="aiCompany">目标公司（可选，从本表 <span id="aiCompanyCount">0</span> 家里选）</label>
+          <input id="aiCompany" type="text" list="aiCompanyList" autocomplete="off" placeholder="例如：美宜佳 / 中核 / 德勤…">
+          <datalist id="aiCompanyList"></datalist>
+          <div class="ai-note" style="margin-top:6px">选了公司会加一道「为什么选择我们 / 你了解我们多少」的定制题。</div>
+        </div>
+        <div class="ai-field">
+          <label>岗位方向</label>
+          <div class="ai-chips" id="aiDirs"></div>
+          <div class="ai-actions" style="margin-top:8px">
+            <button class="btn" id="aiDirEdit" type="button">✎ 编辑岗位方向</button>
+            <span class="ai-note" id="aiDirHint"></span>
+          </div>
+          <div id="aiDirManager" hidden style="margin-top:8px">
+            <div class="ai-note" style="margin-bottom:6px">你可以把用不到的方向删掉、改名，或加上自己投的岗位（如「采销/买手」「审计」「供应链计划」）。保存在本机浏览器。</div>
+            <div id="aiDirList"></div>
+            <div class="ai-actions">
+              <input id="aiDirNew" type="text" placeholder="新增方向，如：采销/买手" style="flex:1;min-width:140px;border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-size:13px">
+              <button class="btn" id="aiDirAdd" type="button">添加</button>
+              <button class="btn" id="aiDirReset" type="button">恢复默认</button>
+            </div>
+          </div>
+        </div>
+        <div class="ai-field">
+          <label for="aiType">面试类型</label>
+          <select id="aiType">
+            <option value="行为面">行为面 / 综合面（HR + 业务）</option>
+            <option value="专业面">专业面（岗位技能）</option>
+            <option value="案例面">案例面 / 商业分析</option>
+            <option value="压力面">压力面（追问密集）</option>
+          </select>
+          <label for="aiCount" style="margin-top:10px">题目数量</label>
+          <select id="aiCount">
+            <option value="5">5 题（约 10 分钟）</option>
+            <option value="8" selected>8 题（约 15 分钟）</option>
+            <option value="10">10 题（约 20 分钟）</option>
+          </select>
+        </div>
+        <div class="ai-field">
+          <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;font-weight:600;color:var(--navy)">
+            <input type="checkbox" id="aiAutoRead" checked> 每题自动朗读题目（浏览器自带语音，不联网）
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;font-weight:600;color:var(--navy)">
+            <input type="checkbox" id="aiAutoMic" checked> 开始面试自动连接麦克风，并自动开始转写
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:6px;margin-top:8px;font-size:12px;font-weight:600;color:var(--navy)">
+            <input type="checkbox" id="aiRandom" checked style="margin-top:2px">
+            <span>🎲 接近真实面试：随机插入意外题、混搭方向、打乱顺序、连续追问<br>
+              <span style="font-weight:400;color:var(--muted)">真实面试不会只按你准备的来。勾选后会混入「出其不意」的题（评价面试官、30 秒压缩、不认同的规则、零预算任务…），并且这类题不按 STAR 模板打分，改看临场判断与取舍。</span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="ai-field" style="margin-top:12px">
+        <label for="aiJD">目标岗位 JD（可选，但强烈建议粘贴——题目和打分都会按 JD 走）</label>
+        <textarea id="aiJD" style="min-height:92px" placeholder="把招聘网站上的岗位职责/任职要求整段贴进来，例如：
+【岗位职责】负责品类商品采购与供应商管理，制定商品结构；分析销售数据优化定价策略…
+【任职要求】本科及以上，具备数据分析能力，熟练使用 Excel/SQL，有供应链或采购实习经历优先"></textarea>
+        <div class="ai-note" style="margin-top:6px">
+          粘贴后会从 JD 里提取能力关键词：出「JD 里要求 X，请举一个你做过的例子」这类题，打分时也按 JD 关键词命中率算内容分——不同岗位不会互相套题。
+        </div>
+      </div>
+
+      <div class="ai-field" style="margin-top:12px">
+        <label for="aiImportText">📥 导入我的题目：可以一行一题直接写，也可以粘贴面经原文让我抽题</label>
+        <textarea id="aiImportText" style="min-height:96px" placeholder="方式一（一行一题）：
+如果客户 ROI 从 2.5 掉到 1.3，想缩减预算转投小红书，你怎么挽留？
+你怎么理解货找人和人找货的区别？
+
+方式二（粘贴整段面经，我会自动抽题）：
+一面面试官问：……　二面：……"></textarea>
+        <div class="ai-actions">
+          <button class="btn primary" id="aiImportBtn" type="button">导入这些题目</button>
+          <button class="btn" id="aiImportFileBtn" type="button">从 txt 文件导入</button>
+          <input type="file" id="aiImportFile" accept=".txt,.md,.csv" hidden>
+          <button class="btn" id="aiClearMyQ" type="button">清空我的题目</button>
+          <span class="ai-note" id="aiImportState"></span>
+        </div>
+        <div class="ai-note" style="margin-top:6px" id="aiMyQList"></div>
+        <div class="ai-note" style="margin-top:6px">
+          选「我的题目 + 大模型追问」时：题目按你导入的顺序问，大模型负责追问、评分和报告；没配 Key 时追问会回退到本地规则（题目照旧按你的清单走）。
+        </div>
+      </div>
+
+      <div class="ai-field" style="margin-top:12px">
+        <label style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="aiResumeMode"> 📄 简历深挖模式（大厂最爱做的事：顺着简历往下钻）
+        </label>
+        <div class="ai-drop" id="aiResumeDrop">
+          <input type="file" id="aiResumeFile" accept=".txt,.md,.markdown,.csv,.json,.docx,.pdf,.rtf" hidden>
+          <div class="ai-drop-title">📄 上传简历（点这里选文件，或把文件拖进来）</div>
+          <div class="ai-note">支持 Word（.docx）、PDF、txt/md；也可以直接把简历文字粘贴到下面。简历只在你本机解析，不会上传。</div>
+        </div>
+        <div class="ai-note" id="aiResumeFileHelp" style="margin:6px 0 8px">
+          粘贴或上传后会自动拆成经历条目，生成「你负责哪部分？数据多少？为什么这么做？如果重做？」这类追问链。
+        </div>
+        <textarea id="aiResume" style="min-height:110px" placeholder="示例：
+2026.03-2026.06  XX公司 运营实习
+· 负责社群日常运营，策划 3 场活动，社群活跃度提升 40%
+· 用 Excel 做用户分层，输出周报给业务方
+
+2025.09  校园营销比赛  队长
+· 带领 5 人团队策划校园推广，覆盖 800 人，获得校赛二等奖"></textarea>
+        <div class="ai-actions">
+          <button class="btn" id="aiAnalyzeResume" type="button">🔍 简历体检 + 生成追问清单</button>
+          <button class="btn" id="aiJdPlanBtn" type="button">🎯 JD×简历匹配分析</button>
+          <span class="ai-note" id="aiResumeHint"></span>
+        </div>
+        <div id="aiResumeReport"></div>
+        <div id="aiJdPlan"></div>
+      </div>
+      <div class="ai-actions">
+        <button class="btn primary" id="aiStart" type="button">开始面试</button>
+        <button class="btn" id="aiResumeSession" type="button" hidden>继续上次未完成的面试</button>
+        <button class="btn" id="aiHistoryBtn" type="button">历史报告</button>
+        <button class="btn" id="aiSettingsBtn" type="button">高级设置（可选 API）</button>
+        <button class="btn" id="aiGuideBtn" type="button">📘 面试指导</button>
+      </div>
+      <div id="aiSettings" hidden style="margin-top:12px">
+        <div class="ai-field">
+          <label for="aiKey">大模型 API Key（可选，仅存本地浏览器，不上传）</label>
+          <input id="aiKey" type="password" placeholder="sk-...（留空则只用本地评分引擎）">
+          <div class="ai-grid" style="margin-top:8px">
+            <div>
+              <label for="aiBase" style="font-size:12px;color:var(--navy)">接口地址</label>
+              <input id="aiBase" type="text" placeholder="https://api.openai.com/v1">
+            </div>
+            <div>
+              <label for="aiModel" style="font-size:12px;color:var(--navy)">模型名</label>
+              <input id="aiModel" type="text" placeholder="gpt-4o-mini">
+            </div>
+          </div>
+          <div class="ai-note" style="margin-top:6px">
+            填了 Key 才会联网调用；页面打开和本地评分都不联网，符合本表「不自动联网」的原则。<br>
+            想省钱/免 Key：接口地址可填本地 Ollama（<code>http://localhost:11434/v1</code>，模型如 <code>qwen2.5:7b</code>），
+            或用 DeepSeek（<code>https://api.deepseek.com/v1</code>，模型 <code>deepseek-chat</code>）；也可以完全不填，用下面的「复制 AI 点评提示词」把题目和你的回答贴到任意聊天工具里点评。
+          </div>
+          <div class="ai-actions" style="margin-top:8px;flex-wrap:wrap">
+            <select id="aiPreset" style="border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:12.5px"></select>
+            <button class="btn" id="aiApplyPreset" type="button">用这个服务商</button>
+            <button class="btn primary" id="aiSaveKey" type="button">保存设置</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;font-weight:600;color:var(--navy)">
+            <input type="checkbox" id="aiUseLlm" checked> 面试官用大模型生成追问与点评（配好 Key 后生效；失败自动回退本地规则）
+          </label>
+          <div class="ai-note" id="aiLlmState" style="margin-top:4px"></div>
+        </div>
+      </div>
+      <div class="ai-note" style="margin-top:12px">
+        面试过程不打扰你：<b>答题时不给提示、也不显示分数</b>，整场答完后统一生成评分报告（含逐题复盘）。评分维度：内容匹配 35%、结构逻辑 25%（STAR 四段＋分点）、表达流畅 20%（语速·口头禅）、深度亮点 20%（量化·复盘·方法细节），全部在本机计算。
+      </div>
+    </div>
+
+    <!-- ============ 2. 面试 ============ -->
+    <div class="ai-view" id="aiViewInterview">
+      <div class="ai-room">
+        <!-- 左：对话流 -->
+        <div class="ai-chat-wrap">
+          <div class="ai-win">
+            <span class="ai-win-dot r"></span><span class="ai-win-dot y"></span><span class="ai-win-dot g"></span>
+            <b id="aiWinTitle">模拟面试</b>
+            <span class="ai-grow"></span>
+            <span class="ai-note">本地运行 · 不录制 · 不上传</span>
+          </div>
+          <div class="ai-chat-head">
+            <span class="ai-live-dot"></span>
+            <b>模拟面试进行中</b>
+            <span class="ai-note" id="aiDirTag">方向：综合</span>
+            <span class="ai-grow"></span>
+            <span class="ai-note">进度 <b id="aiProgress">1 / 8</b> · 答完统一出报告</span>
+          </div>
+          <div class="ai-chat" id="aiChat" aria-live="polite"></div>
+          <div class="ai-compose">
+            <div class="ai-wave" id="aiWave" aria-hidden="true"></div>
+            <textarea id="aiAnswer" placeholder="在这里回答（可语音转写）… Ctrl+Enter 提交"></textarea>
+            <div class="ai-compose-bar">
+              <button class="ai-icon-btn" id="aiVoice" type="button" title="语音作答">🎙</button>
+              <button class="ai-icon-btn" id="aiRead" type="button" title="朗读题目">🔊</button>
+              <button class="ai-icon-btn" id="aiExpand" type="button" title="放大编辑（写长回答）">⤢</button>
+              <span class="ai-dot" id="aiRecDot"></span>
+              <span class="ai-note" id="aiRecState">未开始</span>
+              <button class="btn" id="aiPlayback" type="button" hidden>▶ 回放</button>
+              <span class="ai-grow"></span>
+              <span class="ai-note" id="aiVoiceHint"></span>
+              <button class="ai-send" id="aiSubmit" type="button" title="提交本题（Enter）" aria-label="提交本题">
+                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12l15-7-6 7 6 7z" fill="currentColor"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右：面试官 + 我 -->
+        <aside class="ai-side">
+          <div class="ai-stage">
+            <canvas id="aiAvatar" aria-label="数字人面试官"></canvas>
+            <div class="ai-nameplate">面试官 · 林澜 <span class="ai-aibadge">AI</span></div>
+            <div class="ai-stage-tag tr" id="aiAvatarState">等待开始</div>
+          </div>
+          <div class="ai-float-bubble" id="aiAvatarBubble" hidden></div>
+          <div class="ai-stage ai-self">
+            <video id="aiSelf" playsinline muted></video>
+            <canvas id="aiCamCanvas" width="64" height="48" hidden></canvas>
+            <div class="ai-self-empty" id="aiSelfEmpty"><span class="ai-cam-icon">📷</span>摄像头未开启</div>
+            <div class="ai-stage-tag tr" id="aiCamState">摄像头：关闭</div>
+          </div>
+          <div class="ai-side-ctl">
+            <div class="ai-ring-wrap">
+              <svg class="ai-ring" viewBox="0 0 72 72" aria-hidden="true">
+                <circle class="ai-ring-bg" cx="36" cy="36" r="30"></circle>
+                <circle class="ai-ring-fg" id="aiTimeBar" cx="36" cy="36" r="30"></circle>
+              </svg>
+              <b class="ai-timer" id="aiTimer">00:00</b>
+            </div>
+            <div class="ai-side-btns">
+              <button class="btn" id="aiCamToggle" type="button">📷 摄像头</button>
+              <button class="btn" id="aiSkip" type="button">跳过本题</button>
+              <button class="btn" id="aiFinish" type="button">结束出报告</button>
+            </div>
+            <label class="ai-note" style="display:flex;gap:6px;align-items:center">
+              <input type="checkbox" id="aiCamAnalyze" checked> 分析镜头表现
+            </label>
+            <div class="ai-note" id="aiCamHint">开摄像头更接近真实 AI 面（本地近似估算，不做人脸识别比对）。</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ 3. 报告 ============ -->
+    <div class="ai-view" id="aiViewReport">
+      <div id="aiReportBody"></div>
+      <div class="ai-actions">
+        <button class="btn primary" id="aiAgain" type="button">再练一次</button>
+        <button class="btn" id="aiPromptAll" type="button">📋 复制整场 AI 点评提示词</button>
+        <button class="btn" id="aiCopyReport" type="button">复制报告</button>
+        <button class="btn" id="aiDownloadReport" type="button">下载 Markdown</button>
+        <button class="btn" id="aiCloseReport" type="button">关闭</button>
+      </div>
+    </div>
+
+    <!-- ============ 历史 ============ -->
+    <div class="ai-view" id="aiViewHistory">
+      <div id="aiHistoryBody"></div>
+      <div class="ai-actions"><button class="btn" id="aiHistoryBack" type="button">返回设定</button></div>
+    </div>
+
+    <!-- ============ 面试指导（教练内容） ============ -->
+    <div class="ai-view" id="aiViewGuide">
+      <div class="ai-note" style="margin-bottom:10px">
+        模拟只是体检，能力来自「知道怎么答 + 反复练」。下面是大厂校招最常用的几套打法，每条后面可以直接开始对应类型的练习。
+      </div>
+      <div id="aiGuideBody"></div>
+      <div class="ai-actions"><button class="btn" id="aiGuideBack" type="button">返回设定</button></div>
+    </div>
+  </div>
+</section>
