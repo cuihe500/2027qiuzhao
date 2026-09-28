@@ -21,3 +21,5 @@
 ## 数据更新
 
 公司列表与岗位信息由人工收集整理；更新时在 `build_qiuzhao.mjs` 追加数据 → 更新 `deploy_site/version.json` 的 `rev` 与 `updated` → 运行 `node work/qiuzhao/sync_rows_to_web.mjs`（自动同步 `index.html` 的 DATA / CAT / 版本号并生成 `data.json`）→ 推送即可，在线页面点击“检查更新”会直接应用新版数据。
+
+本 fork 由 [`.github/workflows/sync-data.yml`](.github/workflows/sync-data.yml) 每 5 分钟检查上游 [xinyangli-326/2027qiuzhao](https://github.com/xinyangli-326/2027qiuzhao) 的 `data.json`，有变化且结构校验通过就自动提交到 `main`（提交信息含上游 `rev`、公司数和上游提交）；也可在 Actions 页手动运行，或执行 `gh workflow run sync-data.yml`。只同步 `data.json`，`index.html` 与 `version.json` 不跟随上游。
