@@ -1,8 +1,19 @@
 {
- "rev": "20261014-b",
+ "rev": "20261014-d",
  "updated": "2026-10-14",
- "count": 1015,
+ "count": 1017,
  "data": [
+  {
+   "company": "云南白药",
+   "cat": "医药",
+   "date": "",
+   "roles": "",
+   "note": "入口为大易校招系统（wecruit.hotjob.cn），与云南白药官网挂的招聘租户一致；岗位与开启时间以官网为准",
+   "portal": "https://wecruit.hotjob.cn/SU6136b970bef57c3b638162c4/pb/school.html",
+   "source": "用户提供（2026-10-14），租户已用官网链接交叉验证",
+   "ent": "民企",
+   "cohort": "2027届"
+  },
   {
    "company": "永辉超市",
    "cat": "快消",
@@ -10,6 +21,17 @@
    "roles": "",
    "note": "入口为飞书招聘校招官网；岗位与开启时间以官网为准",
    "portal": "https://yonghui.jobs.feishu.cn/900113/",
+   "source": "用户提供（2026-10-14）",
+   "ent": "民企",
+   "cohort": "2027届"
+  },
+  {
+   "company": "苏宁易购",
+   "cat": "行业巨头",
+   "date": "",
+   "roles": "",
+   "note": "入口为苏宁易购校园招聘官网（campus.suning.cn）；岗位与开启时间以官网为准",
+   "portal": "https://campus.suning.cn/rps-campus/",
    "source": "用户提供（2026-10-14）",
    "ent": "民企",
    "cohort": "2027届"
@@ -11170,7 +11192,9 @@
   }
  ],
  "cats": {
+  "云南白药": "医药",
   "永辉超市": "快消",
+  "苏宁易购": "行业巨头",
   "金山云": "互联网/软件",
   "月之暗面（Kimi）": "AI中厂",
   "宇树科技": "小厂",
