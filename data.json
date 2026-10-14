@@ -1,8 +1,30 @@
 {
- "rev": "20261001-b",
- "updated": "2026-10-01",
- "count": 1013,
+ "rev": "20261014-b",
+ "updated": "2026-10-14",
+ "count": 1015,
  "data": [
+  {
+   "company": "永辉超市",
+   "cat": "快消",
+   "date": "",
+   "roles": "",
+   "note": "入口为飞书招聘校招官网；岗位与开启时间以官网为准",
+   "portal": "https://yonghui.jobs.feishu.cn/900113/",
+   "source": "用户提供（2026-10-14）",
+   "ent": "民企",
+   "cohort": "2027届"
+  },
+  {
+   "company": "金山云",
+   "cat": "互联网/软件",
+   "date": "",
+   "roles": "",
+   "note": "入口为北森校招系统（金山云校园招聘）；岗位与开启时间以官网为准",
+   "portal": "https://jssoft.zhiye.com/campus/jobs",
+   "source": "用户提供（2026-10-14）",
+   "ent": "民企",
+   "cohort": "2027届"
+  },
   {
    "company": "月之暗面（Kimi）",
    "cat": "AI中厂",
@@ -10844,7 +10866,7 @@
    "date": "2026-10-01",
    "roles": "2027届校招多岗（以官网为准）",
    "note": "工作地点：北京·上海·全国（投递入口为官方校招系统/官网招聘页）",
-   "portal": "https://haidilao.jobs.feishu.cn/070469/position/7342775344515369226/detail/campus",
+   "portal": "https://haidilao.jobs.feishu.cn/072846/",
    "source": "2027届校园招聘（官方投递入口，已核验）",
    "ent": "民企",
    "cohort": "2027届"
@@ -10954,7 +10976,7 @@
    "date": "2026-10-01",
    "roles": "2027届校招多岗（以官网为准）",
    "note": "工作地点：厦门·深圳·北京（投递入口为官方校招系统/官网招聘页）",
-   "portal": "https://hr.meitu.com/jobCampus/f549d907-9634-4dbf-b02a-4bfe92c18c15",
+   "portal": "https://hr.meitu.com/jobCampus",
    "source": "2027届校园招聘（官方投递入口，已核验）",
    "ent": "民企",
    "cohort": "2027届"
@@ -11009,7 +11031,7 @@
    "date": "2026-10-01",
    "roles": "2027届校招多岗（以官网为准）",
    "note": "工作地点：杭州·上海（投递入口为官方校招系统/官网招聘页）",
-   "portal": "https://portal.mogu.com/user/newlogin?redirect_url=https%3A%2F%2Fjob.mogu.com%2Fcampus%3Fnull",
+   "portal": "https://job.mogu.com/",
    "source": "2027届校园招聘（官方投递入口，已核验）",
    "ent": "民企",
    "cohort": "2027届"
@@ -11148,6 +11170,8 @@
   }
  ],
  "cats": {
+  "永辉超市": "快消",
+  "金山云": "互联网/软件",
   "月之暗面（Kimi）": "AI中厂",
   "宇树科技": "小厂",
   "知乎": "中厂",
