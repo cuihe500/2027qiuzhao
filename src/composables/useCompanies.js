@@ -1,4 +1,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+function latestDate(value) {
+  if (!value) return ''
+  const revDate = String(value.rev || '').match(/^(\d{4})(\d{2})(\d{2})/)
+  const dates = [
+    value.updated,
+    revDate ? `${revDate[1]}-${revDate[2]}-${revDate[3]}` : '',
+    ...(Array.isArray(value.data) ? value.data.map(company => company?.date) : []),
+  ].filter(date => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date))
+  return dates.sort().at(-1) || value.updated || ''
+}
 
 export function useCompanies() {
   const payload = shallowRef(null)
@@ -45,7 +55,7 @@ export function useCompanies() {
     companies: computed(() => payload.value?.data || []),
     categories: computed(() => payload.value?.cats || {}),
     revision: computed(() => payload.value?.rev || ''),
-    updated: computed(() => payload.value?.updated || ''),
+    updated: computed(() => latestDate(payload.value)),
     loading, error, checkedAt, refresh,
   }
 }

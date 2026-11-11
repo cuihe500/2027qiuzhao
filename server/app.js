@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,6 +13,10 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 const username = 'XiaoLv'
 const credentialsHash = createHash('sha256').update(`${username}\0XiaoLvBaoBei`).digest()
 const sessionCookieName = 'qiuzhao_session'
+export const defaultUpstreamDataUrls = [
+  'https://raw.githubusercontent.com/xinyangli-326/2027qiuzhao/main/data.json',
+  'https://cdn.jsdelivr.net/gh/xinyangli-326/2027qiuzhao@main/data.json',
+]
 
 function sessionToken(request) {
   const cookie = request.get('cookie')?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${sessionCookieName}=`))
@@ -89,13 +93,39 @@ function isSameOrigin(request) {
   }
 }
 
+function validCatalog(payload) {
+  return isObject(payload) &&
+    typeof payload.rev === 'string' && Boolean(payload.rev.trim()) &&
+    Array.isArray(payload.data) &&
+    isObject(payload.cats) &&
+    payload.data.every((company) => isObject(company) && typeof company.company === 'string' && company.company.trim()) &&
+    new Set(payload.data.map((company) => company.company)).size === payload.data.length
+}
+
+function normalizeCatalog(payload) {
+  if (!isObject(payload) || !Array.isArray(payload.data)) return payload
+  const revDate = typeof payload.rev === 'string' && /^(\d{4})(\d{2})(\d{2})/.exec(payload.rev)
+  const dates = [
+    payload.updated,
+    revDate ? `${revDate[1]}-${revDate[2]}-${revDate[3]}` : '',
+    ...payload.data.map((company) => company?.date),
+  ].filter((value) => validDate(value))
+  const updated = dates.sort().at(-1)
+  return updated && updated !== payload.updated ? { ...payload, updated } : payload
+}
+
 export function createApp(options = {}) {
   const databasePath = options.databasePath ?? resolve(rootDirectory, 'storage/qiuzhao.sqlite')
   const dataPath = options.dataPath ?? resolve(rootDirectory, 'data.json')
   const distPath = options.distPath ?? resolve(rootDirectory, 'dist')
+  const rawUpstream = options.upstreamDataUrl ?? (options.dataPath ? '' : defaultUpstreamDataUrls)
+  const upstreamDataUrls = (Array.isArray(rawUpstream) ? rawUpstream : String(rawUpstream).split(','))
+    .map((url) => url.trim())
+    .filter(Boolean)
   const logger = options.logger ?? console
   const now = options.now ?? Date.now
   const loginFailures = new Map()
+  let syncingData = null
   const store = openDatabase(databasePath)
   if (store.retainedWorkspaces) {
     logger.warn?.(`已固定采用记录数最多的旧同步空间；其余 ${store.retainedWorkspaces} 个空间仍完整保留在 SQLite 中，可备份后手动合并。`)
@@ -184,11 +214,52 @@ export function createApp(options = {}) {
 
   app.use('/api', (request, response) => response.status(404).json({ error: '接口不存在。' }))
 
+  async function readLocalCatalog() {
+    return normalizeCatalog(JSON.parse(await readFile(dataPath, 'utf8')))
+  }
+
+  async function fetchUpstreamCatalog(localCatalog) {
+    for (const url of upstreamDataUrls) {
+      try {
+        const separator = url.includes('?') ? '&' : '?'
+        const response = await fetch(`${url}${separator}t=${now()}`, {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(5000),
+        })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const remote = normalizeCatalog(await response.json())
+        if (!validCatalog(remote)) throw new Error('INVALID_CATALOG')
+        if (localCatalog && /^\d{8}/.test(localCatalog.rev || '') && /^\d{8}/.test(remote.rev) && remote.rev < localCatalog.rev) {
+          continue
+        }
+        await writeFile(dataPath, `${JSON.stringify(remote, null, 1)}\n`).catch((error) => {
+          logger.warn?.('Unable to persist synced company data:', error.message)
+        })
+        return remote
+      } catch (error) {
+        logger.warn?.(`Unable to sync upstream company data from ${url}:`, error.message)
+      }
+    }
+    return null
+  }
+
   app.get('/data.json', async (request, response) => {
     response.set('Cache-Control', 'no-store')
     try {
-      const content = await readFile(dataPath, 'utf8')
-      response.json(JSON.parse(content))
+      let localCatalog = null
+      let localError = null
+      try {
+        localCatalog = await readLocalCatalog()
+      } catch (error) {
+        localError = error
+      }
+      if (upstreamDataUrls.length) {
+        syncingData ??= fetchUpstreamCatalog(localCatalog).finally(() => { syncingData = null })
+        const synced = await syncingData
+        if (synced) return response.json(synced)
+      }
+      if (localCatalog) return response.json(localCatalog)
+      throw localError ?? new Error('Unable to load company data')
     } catch (error) {
       logger.error('Unable to read company data:', error.message)
       response.status(503).json({ error: '公司数据暂时不可用，请稍后重试。' })

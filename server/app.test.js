@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -30,7 +31,7 @@ async function fixture(context, options = {}) {
   let address
 
   async function start() {
-    application = createApp({ databasePath, dataPath, distPath, now: options.now, logger: { error() {}, warn: (message) => warnings.push(message) } })
+    application = createApp({ databasePath, dataPath, distPath, upstreamDataUrl: options.upstreamDataUrl, now: options.now, logger: { error() {}, warn: (message) => warnings.push(message) } })
     server = await new Promise((resolveServer, reject) => {
       const instance = application.app.listen(0, '127.0.0.1', () => resolveServer(instance))
       instance.once('error', reject)
@@ -310,6 +311,46 @@ test('public data.json always reads the latest file even with an unchanged revis
   const unavailable = await service.request('/data.json')
   assert.equal(unavailable.status, 503)
   assert.ok(!JSON.stringify(unavailable.body).includes(service.dataPath))
+})
+
+test('public data.json syncs latest upstream catalog, updates date, and falls back when offline', async (context) => {
+  let upstreamPayload = {
+    rev: '20261014-d',
+    updated: '2026-09-26',
+    cats: { '上游新公司': '互联网/软件' },
+    data: [{ company: '上游新公司', date: '2026-10-01' }],
+  }
+  let upstreamStatus = 200
+  const upstreamServer = createServer((request, response) => {
+    response.writeHead(upstreamStatus, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify(upstreamPayload))
+  })
+  await new Promise((resolveServer) => upstreamServer.listen(0, '127.0.0.1', resolveServer))
+  context.after(() => new Promise((resolveClose) => upstreamServer.close(resolveClose)))
+  const upstreamUrl = `http://127.0.0.1:${upstreamServer.address().port}/data.json`
+
+  const service = await fixture(context, { upstreamDataUrl: `http://127.0.0.1:1/unreachable,${upstreamUrl}` })
+  await writeFile(service.dataPath, JSON.stringify({
+    rev: '20260926-a',
+    updated: '2026-09-26',
+    cats: { '旧公司': '大厂' },
+    data: [{ company: '旧公司', date: '2026-09-26' }],
+  }))
+
+  const synced = await service.request('/data.json')
+  assert.equal(synced.status, 200)
+  assert.equal(synced.body.rev, '20261014-d')
+  assert.equal(synced.body.updated, '2026-10-14')
+  assert.equal(synced.body.data[0].company, '上游新公司')
+  const persisted = JSON.parse(await readFile(service.dataPath, 'utf8'))
+  assert.equal(persisted.rev, '20261014-d')
+  assert.equal(persisted.updated, '2026-10-14')
+
+  upstreamStatus = 503
+  const fallback = await service.request('/data.json')
+  assert.equal(fallback.status, 200)
+  assert.equal(fallback.body.rev, '20261014-d')
+  assert.equal(fallback.body.updated, '2026-10-14')
 })
 
 test('invalid changes reject the full batch while blank stages retain historical dates', async (context) => {

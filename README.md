@@ -55,13 +55,13 @@ npm run dev
 
 ```json
 {
-  "rev": "20260926-a",
-  "updated": "2026-09-26",
+  "rev": "20261014-d",
+  "updated": "2026-10-14",
   "count": 1,
   "data": [
     {
       "company": "示例公司",
-      "date": "2026-09-26",
+      "date": "2026-10-14",
       "roles": "产品经理、研发",
       "portal": "https://example.com/jobs",
       "note": "面向2027届",
@@ -78,7 +78,7 @@ npm run dev
 
 [上游同步工作流](.github/workflows/sync-data.yml) 保留：每 5 分钟检查上游 [xinyangli-326/2027qiuzhao](https://github.com/xinyangli-326/2027qiuzhao) 的 `data.json`，有变化且结构通过校验后提交到 `main`。GitHub 调度可能延迟，也可在 Actions 手动运行。
 
-工作流只更新仓库文件。部署服务器仍需通过拉取仓库或部署流程取得新文件；文件更新到服务器后，无需重建前端或重启服务即可生效。`version.json` 保留为历史文件，页面版本信息以 `data.json` 为准。
+服务端处理 `/data.json` 请求时会自动从上游拉取最新 `data.json` 并写回本地文件（上游不可达时回退到本地文件），无需手动 `git pull`、重建前端或重启服务即可显示最新日期与公司列表。
 
 ## 部署
 
