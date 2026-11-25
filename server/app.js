@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
 import { openDatabase, SESSION_MAX_AGE } from './database.js'
+import { DEFAULT_DUAL_SOURCES, fetchAndMergeDualSources } from './catalogSync.js'
 
 const rootDirectory = fileURLToPath(new URL('../', import.meta.url))
 const statuses = ['已投递', '笔试', 'AI面试', '面试', '流程结束']
@@ -13,10 +14,8 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 const username = 'XiaoLv'
 const credentialsHash = createHash('sha256').update(`${username}\0XiaoLvBaoBei`).digest()
 const sessionCookieName = 'qiuzhao_session'
-export const defaultUpstreamDataUrls = [
-  'https://raw.githubusercontent.com/xinyangli-326/2027qiuzhao/main/data.json',
-  'https://cdn.jsdelivr.net/gh/xinyangli-326/2027qiuzhao@main/data.json',
-]
+export const defaultDualSources = DEFAULT_DUAL_SOURCES
+export const defaultUpstreamDataUrls = []
 
 function sessionToken(request) {
   const cookie = request.get('cookie')?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${sessionCookieName}=`))
@@ -117,15 +116,23 @@ function normalizeCatalog(payload) {
 export function createApp(options = {}) {
   const databasePath = options.databasePath ?? resolve(rootDirectory, 'storage/qiuzhao.sqlite')
   const dataPath = options.dataPath ?? resolve(rootDirectory, 'data.json')
+  const baselinePath = options.baselinePath ?? resolve(rootDirectory, 'data.baseline.json')
   const distPath = options.distPath ?? resolve(rootDirectory, 'dist')
-  const rawUpstream = options.upstreamDataUrl ?? (options.dataPath ? '' : defaultUpstreamDataUrls)
+  const rawUpstream = options.upstreamDataUrl ?? ''
   const upstreamDataUrls = (Array.isArray(rawUpstream) ? rawUpstream : String(rawUpstream).split(','))
     .map((url) => url.trim())
     .filter(Boolean)
+  const dualSources = options.dualSources === undefined
+    ? (!options.dataPath && !upstreamDataUrls.length ? defaultDualSources : null)
+    : options.dualSources
+  const syncTtlMs = options.syncTtlMs ?? 60 * 60 * 1000
+  const syncTimeoutMs = options.syncTimeoutMs ?? 15_000
+  const fetchImpl = options.fetch ?? fetch
   const logger = options.logger ?? console
   const now = options.now ?? Date.now
   const loginFailures = new Map()
   let syncingData = null
+  let lastDualSyncAt = 0
   const store = openDatabase(databasePath)
   if (store.retainedWorkspaces) {
     logger.warn?.(`已固定采用记录数最多的旧同步空间；其余 ${store.retainedWorkspaces} 个空间仍完整保留在 SQLite 中，可备份后手动合并。`)
@@ -214,15 +221,29 @@ export function createApp(options = {}) {
 
   app.use('/api', (request, response) => response.status(404).json({ error: '接口不存在。' }))
 
+  async function readJsonFile(filePath) {
+    return normalizeCatalog(JSON.parse(await readFile(filePath, 'utf8')))
+  }
+
   async function readLocalCatalog() {
-    return normalizeCatalog(JSON.parse(await readFile(dataPath, 'utf8')))
+    return readJsonFile(dataPath)
+  }
+
+  async function readBaselineCatalog(fallbackCatalog) {
+    try {
+      const base = await readJsonFile(baselinePath)
+      if (validCatalog(base)) return base
+    } catch {
+      // Fallback to current local data.json if baseline file is absent
+    }
+    return fallbackCatalog
   }
 
   async function fetchUpstreamCatalog(localCatalog) {
     for (const url of upstreamDataUrls) {
       try {
         const separator = url.includes('?') ? '&' : '?'
-        const response = await fetch(`${url}${separator}t=${now()}`, {
+        const response = await fetchImpl(`${url}${separator}t=${now()}`, {
           cache: 'no-store',
           signal: AbortSignal.timeout(5000),
         })
@@ -243,6 +264,37 @@ export function createApp(options = {}) {
     return null
   }
 
+  async function syncDualSourceCatalog(localCatalog) {
+    try {
+      const baseline = await readBaselineCatalog(localCatalog)
+      const protectedCompanies = new Set(Object.keys(store.getRecords()))
+      const result = await fetchAndMergeDualSources({
+        baseline,
+        previousCatalog: localCatalog,
+        protectedCompanies,
+        sources: dualSources,
+        timeoutMs: syncTimeoutMs,
+        now,
+        fetchImpl,
+        logger,
+      })
+      if (!result || !validCatalog(result.catalog)) return null
+      lastDualSyncAt = now()
+      await writeFile(dataPath, `${JSON.stringify(result.catalog, null, 1)}\n`).catch((error) => {
+        logger.warn?.('Unable to persist dual-source company data:', error.message)
+      })
+      return result.catalog
+    } catch (error) {
+      logger.warn?.('Unable to sync dual-source company data:', error.message)
+      return null
+    }
+  }
+
+  function triggerDualSync(localCatalog) {
+    syncingData ??= syncDualSourceCatalog(localCatalog).finally(() => { syncingData = null })
+    return syncingData
+  }
+
   app.get('/data.json', async (request, response) => {
     response.set('Cache-Control', 'no-store')
     try {
@@ -257,6 +309,15 @@ export function createApp(options = {}) {
         syncingData ??= fetchUpstreamCatalog(localCatalog).finally(() => { syncingData = null })
         const synced = await syncingData
         if (synced) return response.json(synced)
+      } else if (dualSources) {
+        const forceRefresh = request.query.refresh === '1' || request.query.refresh === 'true'
+        if (forceRefresh || !localCatalog) {
+          const synced = await triggerDualSync(localCatalog)
+          if (synced) return response.json(synced)
+        } else if (now() - lastDualSyncAt >= syncTtlMs) {
+          // Non-blocking background refresh so first-paint stays instant
+          void triggerDualSync(localCatalog)
+        }
       }
       if (localCatalog) return response.json(localCatalog)
       throw localError ?? new Error('Unable to load company data')
@@ -269,7 +330,7 @@ export function createApp(options = {}) {
   app.use(express.static(distPath, { index: false, maxAge: '1h' }))
   app.get('/{*path}', (request, response, next) => {
     response.set('Cache-Control', 'no-cache')
-    response.sendFile(resolve(distPath, 'index.html'), (error) => {
+    response.sendFile('index.html', { root: distPath }, (error) => {
       if (!error) return
       if (error.code === 'ENOENT') {
         response.status(503).type('text').send('未找到前端构建文件，请先运行 npm run build。')

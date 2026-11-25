@@ -17,6 +17,7 @@ const directionQuery = ref('')
 const selectedDirections = ref([])
 const category = ref('全部')
 const stageFilter = ref('全部')
+const recruitType = ref('全部')
 const sort = ref('date-desc')
 const page = ref(1)
 const pageSize = ref(50)
@@ -27,13 +28,22 @@ const catalog = computed(() => companies.value.map(company => ({
   company,
   category: categories.value[company.company] || company.cat || '未分类',
   name: searchText(company.company),
-  text: searchText([company.company, company.roles, company.note, categories.value[company.company] || company.cat].join(' ')),
+  text: searchText([company.company, company.roles, company.note, company.cohort, company.internOnly ? '纯实习 实习' : '', categories.value[company.company] || company.cat].join(' ')),
 })))
 const stageCounts = computed(() => {
   const counts = Object.fromEntries(['全部', '未投递', ...STATUSES].map(stage => [stage, 0]))
   counts['全部'] = companies.value.length
   for (const company of companies.value) counts[progress.value[company.company]?.stage || '未投递']++
   return counts
+})
+const recruitTypeCounts = computed(() => {
+  let intern = 0
+  for (const company of companies.value) if (company.internOnly) intern++
+  return [
+    ['全部', companies.value.length],
+    ['正式校招', companies.value.length - intern],
+    ['纯实习', intern],
+  ]
 })
 const categoryCounts = computed(() => {
   const counts = new Map()
@@ -49,7 +59,10 @@ const filtered = computed(() => {
   const directionTerms = splitTerms(directionQuery.value)
   const entries = catalog.value.filter(entry => {
     const stage = progress.value[entry.company.company]?.stage || '未投递'
+    const typeMatch = recruitType.value === '全部' ||
+      (recruitType.value === '纯实习' ? Boolean(entry.company.internOnly) : !entry.company.internOnly)
     return (stageFilter.value === '全部' || stage === stageFilter.value) &&
+      typeMatch &&
       (category.value === '全部' || entry.category === category.value) &&
       queryTerms.every(term => entry.text.includes(term)) &&
       directionTerms.every(term => entry.text.includes(term)) &&
@@ -74,7 +87,7 @@ const offset = computed(() => (page.value - 1) * pageSize.value)
 const visibleCompanies = computed(() => filtered.value.slice(offset.value, offset.value + pageSize.value))
 const suggestions = computed(() => query.value.trim() ? catalog.value.filter(entry => entry.name.includes(searchText(query.value))).slice(0, 10) : [])
 
-watch([query, directionQuery, selectedDirections, category, stageFilter, sort, pageSize], () => { page.value = 1 })
+watch([query, directionQuery, selectedDirections, category, stageFilter, recruitType, sort, pageSize], () => { page.value = 1 })
 watch(pageCount, count => { page.value = Math.min(page.value, count) })
 
 function toggleDirection(label) {
@@ -89,6 +102,7 @@ function clearFilters() {
   selectedDirections.value = []
   category.value = '全部'
   stageFilter.value = '全部'
+  recruitType.value = '全部'
 }
 
 function updateStage(company, stage) {
@@ -168,6 +182,12 @@ async function restore(event) {
         </div>
       </div>
       <div class="filter-group">
+        <h2>招聘类型</h2>
+        <div class="chips" role="group" aria-label="按招聘类型筛选">
+          <button v-for="[label, count] in recruitTypeCounts" :key="label" type="button" :class="['chip', { active: recruitType === label }]" :aria-pressed="recruitType === label" @click="recruitType = label">{{ label }} <span>{{ count }}</span></button>
+        </div>
+      </div>
+      <div class="filter-group">
         <h2>公司分类</h2>
         <div class="chips" role="group" aria-label="按公司分类筛选">
           <button v-for="[label, count] in categoryCounts" :key="label" type="button" :class="['chip', { active: category === label }]" :aria-pressed="category === label" @click="category = label">{{ label }} <span>{{ count }}</span></button>
@@ -188,12 +208,12 @@ async function restore(event) {
         <label class="search-field"><span class="sr-only">搜索公司或岗位</span><input v-model="query" list="company-suggestions" type="search" placeholder="搜索公司、岗位或关键词…" aria-label="搜索公司或岗位"><datalist id="company-suggestions"><option v-for="entry in suggestions" :key="entry.company.company" :value="entry.company.company" /></datalist></label>
         <label class="sort-field"><span class="sr-only">排序方式</span><select v-model="sort" aria-label="排序方式"><option value="date-desc">最新开放优先</option><option value="date-asc">最早开放优先</option><option value="company-asc">公司名称</option><option value="stage-desc">投递进度优先</option></select></label>
         <button class="btn" type="button" @click="clearFilters">重置筛选</button>
-        <button class="btn" type="button" :disabled="loading" @click="refresh">{{ loading ? '读取中…' : '检查更新' }}</button>
+        <button class="btn" type="button" :disabled="loading" @click="refresh(true)">{{ loading ? '同步中…' : '检查更新' }}</button>
         <button class="btn primary" type="button" :disabled="!filtered.length" @click="exportCsv">导出 CSV</button>
         <InterviewAssistant :companies="companies" :categories="categories" />
       </div>
       <div class="result-meta" role="status"><span>符合条件 <strong>{{ filtered.length }}</strong> 家 / 共 {{ companies.length }} 家</span><span v-if="checkedAt" class="muted">最近读取 {{ checkedAt }}</span></div>
-      <div v-if="error" class="notice error" role="alert">{{ error }}<span v-if="checkedAt">；当前显示上次成功读取的数据。</span><button class="btn" type="button" :disabled="loading" @click="refresh">重试</button></div>
+      <div v-if="error" class="notice error" role="alert">{{ error }}<span v-if="checkedAt">；当前显示上次成功读取的数据。</span><button class="btn" type="button" :disabled="loading" @click="refresh(true)">重试</button></div>
       <p v-if="loading && !checkedAt" class="empty" role="status">正在加载最新 data.json…</p>
       <CompanyTable v-else-if="checkedAt" :companies="visibleCompanies" :categories="categories" :progress="progress" :offset="offset" @stage="updateStage" @date="updateDate" @end-stage="updateEndStage" />
       <nav v-if="checkedAt" class="pagination" aria-label="表格分页">

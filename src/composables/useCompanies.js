@@ -17,14 +17,15 @@ export function useCompanies() {
   const checkedAt = ref('')
   let controller
 
-  async function refresh() {
+  async function refresh(force = false) {
     if (loading.value) return
     loading.value = true
     error.value = ''
     controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
+    const timeout = setTimeout(() => controller.abort(), force ? 35000 : 15000)
     try {
-      const response = await fetch(`/data.json?t=${Date.now()}`, {
+      const query = force ? `refresh=1&t=${Date.now()}` : `t=${Date.now()}`
+      const response = await fetch(`/data.json?${query}`, {
         cache: 'no-store',
         signal: controller.signal,
       })

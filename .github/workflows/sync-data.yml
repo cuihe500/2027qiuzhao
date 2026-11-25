@@ -1,8 +1,8 @@
-name: 同步上游 data.json
+name: 双源自动同步 data.json
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # GitHub 定时任务最短 5 分钟，高峰期会延迟
+    - cron: '15 */6 * * *' # 每 6 小时自动拉取双源并合并去重
   workflow_dispatch:
 
 permissions:
@@ -14,20 +14,20 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - name: 拉取上游 data.json，有变化则提交
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: 拉取双源校招数据、智能去重合并并校验
         run: |
-          git fetch --depth=1 https://github.com/xinyangli-326/2027qiuzhao.git main
-          git show FETCH_HEAD:data.json > data.json
-          git show FETCH_HEAD:version.json > version.json
-          # 与页面「检查更新」的校验一致，结构不对就让任务失败，坏数据不入库
-          jq -e '(.data | type == "array") and .cats and .rev' data.json > /dev/null
+          node scripts/sync-catalog.mjs
+          jq -e '(.data | type == "array") and (.data | length >= 1000) and .cats and .rev' data.json > /dev/null
           jq -e '.rev and .updated and .count' version.json > /dev/null
           if git diff --quiet -- data.json version.json; then
-            echo "上游 data.json 无变化"
+            echo "双源合并结果无变化"
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m "同步上游 data.json：rev $(jq -r .rev data.json)，$(jq '.data | length' data.json) 家（xinyangli-326/2027qiuzhao@$(git rev-parse --short FETCH_HEAD)）" -- data.json version.json
+          git commit -m "双源同步 data.json：rev $(jq -r .rev data.json)，共 $(jq '.data | length' data.json) 家" -- data.json version.json
           git push

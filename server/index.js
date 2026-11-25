@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { createApp, defaultUpstreamDataUrls } from './app.js'
+import { createApp, defaultDualSources } from './app.js'
 
 const host = process.env.HOST || '127.0.0.1'
 const port = Number(process.env.PORT || 3001)
@@ -11,7 +11,9 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const { app, close } = createApp({
   databasePath: process.env.DATABASE_PATH ? resolve(process.env.DATABASE_PATH) : undefined,
   dataPath: process.env.DATA_PATH ? resolve(process.env.DATA_PATH) : undefined,
-  upstreamDataUrl: process.env.UPSTREAM_DATA_URL ?? defaultUpstreamDataUrls,
+  baselinePath: process.env.BASELINE_PATH ? resolve(process.env.BASELINE_PATH) : undefined,
+  upstreamDataUrl: process.env.UPSTREAM_DATA_URL || '',
+  dualSources: process.env.UPSTREAM_DATA_URL ? null : defaultDualSources,
 })
 const server = app.listen(port, host, () => {
   console.log(`秋招服务已启动：http://${host}:${port}`)

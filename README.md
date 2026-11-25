@@ -76,9 +76,9 @@ npm run dev
 
 公司名称作为进度记录的标识，需保持唯一和稳定。表格分页支持每页 50 / 100 / 200 家；CSV 导出当前筛选结果，JSON 备份包含全部个人进度。
 
-[上游同步工作流](.github/workflows/sync-data.yml) 保留：每 5 分钟检查上游 [xinyangli-326/2027qiuzhao](https://github.com/xinyangli-326/2027qiuzhao) 的 `data.json`，有变化且结构通过校验后提交到 `main`。GitHub 调度可能延迟，也可在 Actions 手动运行。
+[双源同步工作流](.github/workflows/sync-data.yml) 每 6 小时运行 `npm run sync:data`（`scripts/sync-catalog.mjs`），自动拉取 [Chloe-s-Space/job-website](https://github.com/Chloe-s-Space/job-website) 与 [HU-eun/campus-recruitment](https://github.com/HU-eun/campus-recruitment) 双源 2027 届数据，过滤外部已过期条目、保留纯实习并显著标注、保持央国企分支独立、四层智能去重并与不可变基线 `data.baseline.json` 融合后提交到 `main`。
 
-服务端处理 `/data.json` 请求时会自动从上游拉取最新 `data.json` 并写回本地文件（上游不可达时回退到本地文件），无需手动 `git pull`、重建前端或重启服务即可显示最新日期与公司列表。
+服务端处理 `/data.json` 请求时毫秒级返回本地缓存并按 60 分钟 TTL 在后台静默刷新；点击页面「检查更新」时实时触发双源拉取并写回本地 `data.json`（双源均不可达时自动回退到本地文件），同时自动保护 SQLite 中所有已有投递进度的公司记录不被删除或改名。
 
 ## 部署
 

@@ -36,11 +36,20 @@ function changeStage(event, company, previous) {
       </thead>
       <tbody>
         <tr v-if="!companies.length"><td colspan="8" class="empty">没有符合条件的公司，试试调整筛选条件。</td></tr>
-        <tr v-for="(company, index) in companies" :key="company.company">
+        <tr v-for="(company, index) in companies" :key="company.company" :class="{ 'intern-row': company.internOnly }">
           <td class="row-number">{{ offset + index + 1 }}</td>
           <td class="date-cell">{{ company.date || '待确认' }}</td>
-          <th scope="row" class="company-cell">{{ company.company }}</th>
-          <td><div class="badges"><span class="pill">{{ company.ent || '民企' }}</span><span class="pill neutral">{{ company.cohort || '2027届' }}</span></div></td>
+          <th scope="row" class="company-cell">
+            <span>{{ company.company }}</span>
+            <span v-if="company.internOnly" class="pill intern company-intern-tag">纯实习</span>
+          </th>
+          <td>
+            <div class="badges">
+              <span class="pill">{{ company.ent || '民企' }}</span>
+              <span class="pill neutral">{{ company.cohort || '2027届' }}</span>
+              <span v-if="company.internOnly" class="pill intern">仅实习岗</span>
+            </div>
+          </td>
           <td><span class="pill category">{{ categories[company.company] || company.cat || '未分类' }}</span></td>
           <td class="roles-cell">
             <div>{{ company.roles || '岗位信息待补充' }}</div>

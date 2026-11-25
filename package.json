@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node --env-file-if-exists=.env server/index.js",
+    "sync:data": "node scripts/sync-catalog.mjs",
     "test": "node --test",
     "test:e2e": "playwright test"
   },

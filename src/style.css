@@ -74,6 +74,11 @@ tbody tr:hover { background: #fafcff; }
 .pill { display: inline-block; border-radius: 4px; background: #eaf1fb; color: #3b6098; padding: 3px 6px; font-size: 11px; white-space: nowrap; }
 .pill.neutral { background: #f0f2f5; color: #778294; }
 .pill.category { background: #f0edfa; color: #705997; }
+.pill.intern { background: #fff3d6; color: #9a4d00; border: 1px solid #f0be67; font-weight: 600; }
+.company-intern-tag { margin-left: 6px; vertical-align: middle; }
+tr.intern-row { background: #fffcf5; }
+tr.intern-row:hover { background: #fff8e8; }
+tr.intern-row .row-number { box-shadow: inset 3px 0 0 #e69b28; }
 .roles-cell { min-width: 180px; max-width: 310px; line-height: 1.7; }
 td details { margin-top: 7px; color: #708098; font-size: 11px; }
 td details p { margin: 7px 0 0; }

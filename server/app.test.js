@@ -413,3 +413,145 @@ test('production serves built assets and SPA routes without exposing server cred
   assert.ok(!source.body.includes('openDatabase'))
   assert.ok(!source.body.includes(credentials.password))
 })
+
+test('dual-source refresh merges both feeds, preserves baseline and SQLite-tracked companies, and falls back offline', async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), 'qiuzhao-dual-'))
+  const databasePath = join(directory, 'progress.sqlite')
+  const dataPath = join(directory, 'data.json')
+  const baselinePath = join(directory, 'data.baseline.json')
+  const distPath = join(directory, 'dist')
+  await mkdir(distPath)
+  await writeFile(join(distPath, 'index.html'), '<!doctype html><div id="app"></div>')
+
+  const baselinePayload = {
+    rev: '20261014-d',
+    updated: '2026-10-14',
+    cats: { '基线大厂': '大厂' },
+    data: [{ company: '基线大厂', cat: '大厂', date: '2026-10-01', roles: '研发', portal: 'https://base.example.com', note: '原有备注', source: '基线', ent: '民企', cohort: '2027届' }],
+  }
+  const initialDataPayload = {
+    rev: '20261120-dual-2',
+    updated: '2026-11-20',
+    cats: { '基线大厂': '大厂', '历史已投外源公司': '金融' },
+    data: [
+      ...baselinePayload.data,
+      { company: '历史已投外源公司', cat: '金融', date: '2026-11-01', roles: '开发', portal: 'https://tracked.example.com', note: '', source: '秋招信库', ent: '央企国企', cohort: '2027届' },
+    ],
+  }
+  await writeFile(baselinePath, JSON.stringify(baselinePayload))
+  await writeFile(dataPath, JSON.stringify(initialDataPayload))
+
+  let online = true
+  const mockSources = {
+    chloe: ['https://mock.local/chloe.json'],
+    hu: ['https://mock.local/hu.json'],
+  }
+  const mockFetch = async (url) => {
+    if (!online) throw new Error('offline')
+    if (url.includes('chloe')) {
+      return {
+        ok: true,
+        json: async () => ({
+          jobs: [
+            {
+              company: '双源新增科技',
+              title: '后端开发',
+              program: '2027届秋招',
+              industry: 'IT/互联网/游戏',
+              cities: ['上海'],
+              cohort: '2027届',
+              batch: '秋招专场',
+              updatedAt: '2026-11-25T08:00:00+08:00',
+              applyUrl: 'https://newtech.example.com/campus',
+            },
+          ],
+        }),
+      }
+    }
+    return {
+      ok: true,
+      json: async () => ([
+        {
+          '公司名称': '双源新增科技',
+          '行业大类': ['IT/互联网/游戏'],
+          '企业性质': ['央国企'],
+          '更新时间': '2026/11/25',
+          '招聘岗位': '算法工程师',
+          '是否需要笔试': ['含免笔试'],
+          '投递方式': 'https://newtech.example.com/campus',
+          '招聘对象': ['2027届'],
+          '批次': ['秋招'],
+        },
+        {
+          '公司名称': '纯实习示例公司',
+          '行业大类': ['IT/互联网/游戏'],
+          '企业性质': ['民企'],
+          '更新时间': '2026/11/25',
+          '招聘岗位': 'AI算法实习生',
+          '投递方式': 'https://intern.example.com',
+          '招聘对象': ['2027届'],
+          '批次': ['日常实习'],
+        },
+      ]),
+    }
+  }
+
+  const application = createApp({
+    databasePath,
+    dataPath,
+    baselinePath,
+    distPath,
+    dualSources: mockSources,
+    fetch: mockFetch,
+    now: () => Date.parse('2026-11-25T09:00:00Z'),
+    logger: { error() {}, warn() {} },
+  })
+  const server = await new Promise((resolveServer, reject) => {
+    const instance = application.app.listen(0, '127.0.0.1', () => resolveServer(instance))
+    instance.once('error', reject)
+  })
+  context.after(async () => {
+    await new Promise((resolveClose, reject) => server.close((error) => error ? reject(error) : resolveClose()))
+    application.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+  const baseUrl = `http://127.0.0.1:${server.address().port}`
+
+  // Record progress on a non-baseline company in SQLite
+  const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(credentials),
+  })
+  const cookie = loginRes.headers.get('set-cookie').split(';')[0]
+  const saveRes = await fetch(`${baseUrl}/api/sync`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ changes: [{ company: '历史已投外源公司', record: progress('面试'), baseVersion: 0 }] }),
+  })
+  assert.equal(saveRes.status, 200)
+
+  // Forced refresh pulls & merges both sources and protects both baseline and SQLite-tracked companies
+  const refreshed = await (await fetch(`${baseUrl}/data.json?refresh=1`)).json()
+  const names = new Set(refreshed.data.map((x) => x.company))
+  assert.ok(names.has('基线大厂'))
+  assert.ok(names.has('历史已投外源公司'))
+  assert.ok(names.has('双源新增科技'))
+  assert.ok(names.has('纯实习示例公司'))
+  const mergedNew = refreshed.data.find((x) => x.company === '双源新增科技')
+  assert.equal(mergedNew.ent, '央企国企')
+  assert.match(mergedNew.roles, /后端开发/)
+  assert.match(mergedNew.roles, /算法工程师/)
+  assert.match(mergedNew.note, /含免笔试/)
+  const internItem = refreshed.data.find((x) => x.company === '纯实习示例公司')
+  assert.equal(internItem.internOnly, true)
+  assert.match(internItem.note, /【纯实习·日常实习】/)
+
+  // Offline fallback returns last persisted merged catalog without error
+  online = false
+  const fallbackRes = await fetch(`${baseUrl}/data.json?refresh=1`)
+  assert.equal(fallbackRes.status, 200)
+  const fallback = await fallbackRes.json()
+  assert.equal(fallback.rev, refreshed.rev)
+})
+
